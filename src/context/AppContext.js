@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 
-const ADMIN_PASSWORD = "AdMiN2026"; // Change this before deploying!
+const ADMIN_PASSWORD = "admin123"; // Change this before deploying!
 
 const BASE_WORKOUTS = [
   { id: "burpees",     name: "Burpees",       type: "reps", threshold: 10, unit: "reps", icon: "⚡", base: true },

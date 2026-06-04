@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
-import { s, colors } from "../styles";
 
 export default function AuthPage() {
   const { signIn, signUp, adminSignIn } = useApp();
