@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 
-const BASE_WORKOUT_IDS = ["burpees","pushups","situps","running","biking","pickleball","walking","golf"];
+
 
 export default function AdminPage() {
   const { users, removeUser, allWorkouts, customWorkouts, addCustomWorkout, removeCustomWorkout } = useApp();
