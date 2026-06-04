@@ -8,7 +8,6 @@ export default function GroupsPage() {
   const [success, setSuccess] = useState("");
 
   const userGroups = groups.filter(g => (currentUser.groupIds || []).includes(g.id));
-  const notJoined = groups.filter(g => !(currentUser.groupIds || []).includes(g.id));
 
   const handleJoin = () => {
     setError(""); setSuccess("");

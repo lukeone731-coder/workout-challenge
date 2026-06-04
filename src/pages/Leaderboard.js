@@ -5,7 +5,7 @@ const MEDAL = ["🥇", "🥈", "🥉"];
 const COLORS = ["#f97316","#3b82f6","#22c55e","#a855f7","#ec4899","#14b8a6","#eab308","#ef4444"];
 
 export default function Leaderboard() {
-  const { users, logs, groups, activeGroup, activeGroupId, setActiveGroupId, getPointsForUser, getUsersInGroup, currentUser } = useApp();
+  const { logs, groups, activeGroup, activeGroupId, setActiveGroupId, getPointsForUser, getUsersInGroup, currentUser } = useApp();
   const [profileUser, setProfileUser] = useState(null);
 
   if (!activeGroup && groups.length === 0) {
