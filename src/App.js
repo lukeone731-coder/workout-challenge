@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { useApp } from "./context/AppContext";
 import AuthPage from "./pages/AuthPage";
 import Leaderboard from "./pages/Leaderboard";
 import LogWorkout from "./pages/LogWorkout";
 import History from "./pages/History";
+import GroupsPage from "./pages/GroupsPage";
 import AdminPage from "./pages/AdminPage";
-import { useState } from "react";
 
 export default function App() {
   const { currentUser, signOut } = useApp();
@@ -22,6 +23,7 @@ export default function App() {
         { key: "leaderboard", icon: "🏆", label: "Board" },
         { key: "log",         icon: "➕", label: "Log" },
         { key: "history",     icon: "📋", label: "History" },
+        { key: "groups",      icon: "👥", label: "Groups" },
       ];
 
   return (
@@ -35,6 +37,8 @@ export default function App() {
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
         select { appearance: none; }
+        button { transition: opacity 0.15s; }
+        button:active { opacity: 0.7; }
       `}</style>
 
       {/* Header */}
@@ -57,6 +61,7 @@ export default function App() {
         {tab === "leaderboard" && <Leaderboard />}
         {tab === "log"         && <LogWorkout />}
         {tab === "history"     && <History />}
+        {tab === "groups"      && <GroupsPage />}
         {tab === "admin"       && <AdminPage />}
       </div>
 

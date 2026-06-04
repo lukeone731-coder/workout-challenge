@@ -2,30 +2,25 @@ import { useState } from "react";
 import { useApp } from "../context/AppContext";
 
 export default function LogWorkout() {
-  const { currentUser, allWorkouts, addLog } = useApp();
+  const { currentUser, allWorkouts, addLog, groups } = useApp();
   const [workoutId, setWorkoutId] = useState(allWorkouts[0]?.id || "");
   const [amount, setAmount] = useState("");
   const [flash, setFlash] = useState(null);
 
   const workout = allWorkouts.find(w => w.id === workoutId);
-  const pts = workout && amount ? Math.floor(parseFloat(amount) / workout.threshold) : 0;
+  const userGroups = groups.filter(g => (currentUser.groupIds || []).includes(g.id));
+
+  const previewPts = () => {
+    if (!workout || !amount) return 0;
+    const raw = parseFloat(amount) / workout.threshold;
+    return Math.round(raw * 10) / 10;
+  };
+  const pts = previewPts();
 
   const handle = () => {
     if (!workout || pts === 0) return;
-    addLog({
-      id: Date.now().toString(),
-      userId: currentUser.id,
-      username: currentUser.username,
-      workoutId,
-      workoutName: workout.name,
-      icon: workout.icon,
-      amount: parseFloat(amount),
-      unit: workout.unit,
-      points: pts,
-      date: new Date().toLocaleDateString(),
-      ts: Date.now(),
-    });
-    setFlash(pts);
+    const earned = addLog(workoutId, amount);
+    setFlash(earned);
     setAmount("");
     setTimeout(() => setFlash(null), 2500);
   };
@@ -38,15 +33,27 @@ export default function LogWorkout() {
 
   return (
     <div style={{ padding: "0 16px" }}>
-      <div style={{ fontSize: 11, letterSpacing: 3, color: "#555", marginBottom: 16, fontFamily: "'DM Sans', sans-serif" }}>LOG WORKOUT</div>
-      <div style={{ fontSize: 14, color: "#f97316", fontFamily: "'DM Sans', sans-serif", marginBottom: 20 }}>
+      <div style={{ fontSize: 11, letterSpacing: 3, color: "#555", marginBottom: 4, fontFamily: "'DM Sans', sans-serif" }}>LOG WORKOUT</div>
+      <div style={{ fontSize: 13, color: "#f97316", fontFamily: "'DM Sans', sans-serif", marginBottom: 6 }}>
         Logging as <strong>{currentUser.username}</strong>
       </div>
+      {userGroups.length > 0 && (
+        <div style={{ fontSize: 12, color: "#555", fontFamily: "'DM Sans', sans-serif", marginBottom: 20 }}>
+          Will count for: {userGroups.map(g => g.name).join(", ")}
+        </div>
+      )}
+      {userGroups.length === 0 && (
+        <div style={{ fontSize: 12, color: "#ef4444", fontFamily: "'DM Sans', sans-serif", marginBottom: 20 }}>
+          You're not in any groups yet — join one in the Groups tab!
+        </div>
+      )}
 
       {flash !== null && (
         <div style={{ background: "linear-gradient(135deg,#0a2e0a,#111)", border: "1px solid #22c55e", borderRadius: 12, padding: 16, marginBottom: 16, textAlign: "center", animation: "slideIn 0.3s ease" }}>
           <div style={{ fontSize: 48, color: "#22c55e", fontFamily: "'Bebas Neue', sans-serif", lineHeight: 1 }}>+{flash}</div>
-          <div style={{ color: "#22c55e", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>points earned!</div>
+          <div style={{ color: "#22c55e", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>
+            points earned{userGroups.length > 1 ? ` in ${userGroups.length} groups` : ""}!
+          </div>
         </div>
       )}
 

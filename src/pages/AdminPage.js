@@ -1,27 +1,31 @@
 import { useState } from "react";
 import { useApp } from "../context/AppContext";
 
-
-
 export default function AdminPage() {
-  const { users, removeUser, allWorkouts, customWorkouts, addCustomWorkout, removeCustomWorkout } = useApp();
-  const [section, setSection] = useState("players");
+  const { users, removeUser, allWorkouts, customWorkouts, addCustomWorkout, removeCustomWorkout, groups, createGroup, deleteGroup } = useApp();
+  const [section, setSection] = useState("groups");
+  const [newGroupName, setNewGroupName] = useState("");
+  const [groupMsg, setGroupMsg] = useState("");
   const [newName, setNewName] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [suggestion, setSuggestion] = useState(null);
   const [aiError, setAiError] = useState("");
   const [confirmRemove, setConfirmRemove] = useState(null);
 
+  const handleCreateGroup = () => {
+    const err = createGroup(newGroupName);
+    if (err) setGroupMsg(err);
+    else { setGroupMsg("Group created!"); setNewGroupName(""); setTimeout(() => setGroupMsg(""), 2500); }
+  };
+
   const askAI = async () => {
     if (!newName.trim()) return;
     setAiLoading(true); setSuggestion(null); setAiError("");
     const list = allWorkouts.map(w => `${w.name}: 1pt per ${w.threshold} ${w.unit} (${w.type})`).join("\n");
-    const prompt = `You are helping design a workout challenge point system. Existing workouts:\n${list}\n\nPoint philosophy:\n- Running 5 min = 1 pt (gold standard cardio)\n- Burpees 10 reps = 1 pt (high intensity)\n- Pushups 25 reps = 1 pt\n- Points reflect real health benefit and effort\n\nNew workout to add: "${newName}"\n\nRespond ONLY with a raw JSON object (no markdown, no backticks):\n{"type":"reps","threshold":20,"unit":"reps","icon":"🏊","rationale":"One sentence reason"}\nor\n{"type":"time","threshold":10,"unit":"min","icon":"🏊","rationale":"One sentence reason"}`;
-
+    const prompt = `You are helping design a workout challenge point system. Existing workouts:\n${list}\n\nPoint philosophy:\n- Running 5 min = 1 pt (gold standard cardio)\n- Burpees 10 reps = 1 pt (high intensity)\n- Pushups 25 reps = 1 pt\n- Points are decimals rounded to nearest tenth\n\nNew workout to add: "${newName}"\n\nRespond ONLY with a raw JSON object (no markdown, no backticks):\n{"type":"reps","threshold":20,"unit":"reps","icon":"🏊","rationale":"One sentence reason"}\nor\n{"type":"time","threshold":10,"unit":"min","icon":"🏊","rationale":"One sentence reason"}`;
     try {
       const res = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ model: "claude-sonnet-4-20250514", max_tokens: 1000, messages: [{ role: "user", content: prompt }] }),
       });
       const data = await res.json();
@@ -33,61 +37,86 @@ export default function AdminPage() {
 
   const confirmAdd = () => {
     if (!suggestion) return;
-    addCustomWorkout({
-      id: newName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(),
-      name: newName.trim(), type: suggestion.type,
-      threshold: suggestion.threshold, unit: suggestion.unit, icon: suggestion.icon || "🏋️",
-    });
+    addCustomWorkout({ id: newName.toLowerCase().replace(/\s+/g, "_") + "_" + Date.now(), name: newName.trim(), type: suggestion.type, threshold: suggestion.threshold, unit: suggestion.unit, icon: suggestion.icon || "🏋️" });
     setNewName(""); setSuggestion(null);
   };
 
-  const inp = {
-    padding: "12px 14px", background: "#111", border: "1px solid #222", borderRadius: 10,
-    color: "#fff", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none",
-  };
+  const inp = { padding: "12px 14px", background: "#111", border: "1px solid #222", borderRadius: 10, color: "#fff", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none" };
 
   return (
     <div style={{ padding: "0 16px" }}>
       <div style={{ fontSize: 11, letterSpacing: 3, color: "#555", marginBottom: 16, fontFamily: "'DM Sans', sans-serif" }}>ADMIN PANEL</div>
-
-      <div style={{ display: "flex", gap: 6, marginBottom: 20 }}>
-        {[["players","👥 Players"],["workouts","🏋️ Workouts"]].map(([k,l]) => (
-          <button key={k} onClick={() => setSection(k)} style={{
-            flex: 1, padding: 10, background: section === k ? "#f97316" : "#111",
-            border: `1px solid ${section === k ? "#f97316" : "#222"}`, borderRadius: 8,
-            color: section === k ? "#fff" : "#555", cursor: "pointer",
-            fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, letterSpacing: 1,
-          }}>{l}</button>
+      <div style={{ display: "flex", gap: 6, marginBottom: 20, overflowX: "auto" }}>
+        {[["groups","👥 Groups"],["players","🙋 Players"],["workouts","🏋️ Workouts"]].map(([k,l]) => (
+          <button key={k} onClick={() => setSection(k)} style={{ flexShrink: 0, padding: "9px 14px", background: section === k ? "#f97316" : "#111", border: `1px solid ${section === k ? "#f97316" : "#222"}`, borderRadius: 8, color: section === k ? "#fff" : "#555", cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", fontSize: 15, letterSpacing: 1 }}>{l}</button>
         ))}
       </div>
+
+      {/* GROUPS */}
+      {section === "groups" && (
+        <div>
+          <div style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16, marginBottom: 20 }}>
+            <div style={{ fontSize: 12, color: "#888", fontFamily: "'DM Sans', sans-serif", marginBottom: 10 }}>Create a new group:</div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <input value={newGroupName} onChange={e => setNewGroupName(e.target.value)} placeholder="Group name..." style={{ ...inp, flex: 1 }} onKeyDown={e => e.key === "Enter" && handleCreateGroup()} />
+              <button onClick={handleCreateGroup} style={{ background: "#f97316", border: "none", borderRadius: 10, padding: "0 14px", color: "#fff", cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", fontSize: 16 }}>CREATE</button>
+            </div>
+            {groupMsg && <div style={{ color: groupMsg.includes("!") ? "#22c55e" : "#ef4444", fontFamily: "'DM Sans', sans-serif", fontSize: 12, marginTop: 8 }}>{groupMsg}</div>}
+          </div>
+
+          {groups.length === 0 && <div style={{ color: "#333", fontFamily: "'DM Sans', sans-serif", textAlign: "center", padding: 40 }}>No groups yet</div>}
+          {groups.map(g => {
+            const memberCount = users.filter(u => (u.groupIds || []).includes(g.id)).length;
+            return (
+              <div key={g.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 12, padding: 16, marginBottom: 12 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                  <div>
+                    <div style={{ fontSize: 20, fontFamily: "'Bebas Neue', sans-serif", color: "#fff" }}>{g.name}</div>
+                    <div style={{ fontSize: 12, fontFamily: "'DM Sans', sans-serif", color: "#555", marginTop: 2 }}>
+                      Code: <span style={{ color: "#f97316", letterSpacing: 2 }}>{g.code}</span> · {memberCount} member{memberCount !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                  {confirmRemove === g.id ? (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => { deleteGroup(g.id); setConfirmRemove(null); }} style={{ background: "#ef4444", border: "none", borderRadius: 6, padding: "5px 10px", color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 11 }}>Delete</button>
+                      <button onClick={() => setConfirmRemove(null)} style={{ background: "#222", border: "none", borderRadius: 6, padding: "5px 10px", color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 11 }}>Cancel</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setConfirmRemove(g.id)} style={{ background: "none", border: "1px solid #333", borderRadius: 6, padding: "5px 10px", color: "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 11 }}>Delete</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* PLAYERS */}
       {section === "players" && (
         <div>
-          <div style={{ fontSize: 12, color: "#555", fontFamily: "'DM Sans', sans-serif", marginBottom: 12 }}>
-            {users.length} player{users.length !== 1 ? "s" : ""} registered
-          </div>
-          {users.length === 0 && (
-            <div style={{ color: "#333", fontFamily: "'DM Sans', sans-serif", textAlign: "center", padding: 40 }}>No players yet — they'll appear once they sign up</div>
-          )}
-          {users.map(u => (
-            <div key={u.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 10, padding: 14, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 18, letterSpacing: 1, fontFamily: "'Bebas Neue', sans-serif", color: "#fff" }}>{u.username}</div>
-                <div style={{ fontSize: 11, color: "#555", fontFamily: "'DM Sans', sans-serif" }}>
-                  Joined {new Date(u.joinedAt).toLocaleDateString()}
+          <div style={{ fontSize: 12, color: "#555", fontFamily: "'DM Sans', sans-serif", marginBottom: 12 }}>{users.length} player{users.length !== 1 ? "s" : ""} registered</div>
+          {users.length === 0 && <div style={{ color: "#333", fontFamily: "'DM Sans', sans-serif", textAlign: "center", padding: 40 }}>No players yet</div>}
+          {users.map(u => {
+            const userGroupNames = groups.filter(g => (u.groupIds || []).includes(g.id)).map(g => g.name);
+            return (
+              <div key={u.id} style={{ background: "#111", border: "1px solid #1e1e1e", borderRadius: 10, padding: 14, marginBottom: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 18, letterSpacing: 1, fontFamily: "'Bebas Neue', sans-serif", color: "#fff" }}>{u.username}</div>
+                  <div style={{ fontSize: 11, color: "#555", fontFamily: "'DM Sans', sans-serif" }}>
+                    {userGroupNames.length > 0 ? userGroupNames.join(", ") : "No groups"}
+                  </div>
                 </div>
+                {confirmRemove === u.id ? (
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button onClick={() => { removeUser(u.id); setConfirmRemove(null); }} style={{ background: "#ef4444", border: "none", borderRadius: 6, padding: "6px 12px", color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>Remove</button>
+                    <button onClick={() => setConfirmRemove(null)} style={{ background: "#222", border: "none", borderRadius: 6, padding: "6px 12px", color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>Cancel</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmRemove(u.id)} style={{ background: "none", border: "1px solid #333", borderRadius: 6, padding: "6px 10px", color: "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>Remove</button>
+                )}
               </div>
-              {confirmRemove === u.id ? (
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => { removeUser(u.id); setConfirmRemove(null); }} style={{ background: "#ef4444", border: "none", borderRadius: 6, padding: "6px 12px", color: "#fff", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>Remove</button>
-                  <button onClick={() => setConfirmRemove(null)} style={{ background: "#222", border: "none", borderRadius: 6, padding: "6px 12px", color: "#888", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>Cancel</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfirmRemove(u.id)} style={{ background: "none", border: "1px solid #333", borderRadius: 6, padding: "6px 10px", color: "#555", cursor: "pointer", fontFamily: "'DM Sans', sans-serif", fontSize: 12 }}>Remove</button>
-              )}
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -95,19 +124,12 @@ export default function AdminPage() {
       {section === "workouts" && (
         <div>
           <div style={{ fontSize: 12, color: "#555", fontFamily: "'DM Sans', sans-serif", marginBottom: 12 }}>Add a new workout — AI sets the fair point value:</div>
-
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Swimming, Jump rope..." style={{ ...inp, flex: 1 }} onKeyDown={e => e.key === "Enter" && askAI()} />
-            <button onClick={askAI} disabled={aiLoading || !newName.trim()} style={{
-              background: "#f97316", border: "none", borderRadius: 10, padding: "0 16px",
-              color: "#fff", cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", fontSize: 16,
-              opacity: aiLoading || !newName.trim() ? 0.5 : 1,
-            }}>{aiLoading ? "..." : "ASK AI"}</button>
+            <button onClick={askAI} disabled={aiLoading || !newName.trim()} style={{ background: "#f97316", border: "none", borderRadius: 10, padding: "0 16px", color: "#fff", cursor: "pointer", fontFamily: "'Bebas Neue', sans-serif", fontSize: 16, opacity: aiLoading || !newName.trim() ? 0.5 : 1 }}>{aiLoading ? "..." : "ASK AI"}</button>
           </div>
-
           {aiError && <div style={{ color: "#ef4444", fontFamily: "'DM Sans', sans-serif", fontSize: 13, marginBottom: 10 }}>{aiError}</div>}
           {aiLoading && <div style={{ color: "#f97316", fontFamily: "'DM Sans', sans-serif", fontSize: 13, marginBottom: 10, opacity: 0.7 }}>Calculating fair point value...</div>}
-
           {suggestion && (
             <div style={{ background: "linear-gradient(135deg,#1a0e00,#111)", border: "1px solid #f97316", borderRadius: 12, padding: 16, marginBottom: 16 }}>
               <div style={{ fontSize: 22, fontFamily: "'Bebas Neue', sans-serif", color: "#fff", marginBottom: 2 }}>{suggestion.icon} {newName}</div>
@@ -119,7 +141,6 @@ export default function AdminPage() {
               </div>
             </div>
           )}
-
           {customWorkouts.length > 0 && (
             <>
               <div style={{ fontSize: 11, color: "#555", letterSpacing: 2, marginBottom: 10, fontFamily: "'DM Sans', sans-serif" }}>CUSTOM WORKOUTS</div>
@@ -134,7 +155,6 @@ export default function AdminPage() {
               ))}
             </>
           )}
-
           <div style={{ fontSize: 11, color: "#333", letterSpacing: 2, marginTop: 16, marginBottom: 10, fontFamily: "'DM Sans', sans-serif" }}>BASE WORKOUTS</div>
           {allWorkouts.filter(w => w.base).map(w => (
             <div key={w.id} style={{ background: "#0d0d0d", border: "1px solid #161616", borderRadius: 10, padding: 12, marginBottom: 8 }}>
