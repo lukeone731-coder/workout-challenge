@@ -8,8 +8,16 @@ import GroupsPage from "./pages/GroupsPage";
 import AdminPage from "./pages/AdminPage";
 
 export default function App() {
-  const { currentUser, signOut } = useApp();
+  const { currentUser, signOut, loading } = useApp();
   const [tab, setTab] = useState("leaderboard");
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: "#0a0a0f", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;500;600&display=swap'); * { box-sizing: border-box; margin: 0; padding: 0; } @keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      <div style={{ width: 36, height: 36, border: "3px solid #1a1a1a", borderTop: "3px solid #f97316", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+      <div style={{ color: "#555", fontFamily: "'DM Sans', sans-serif", fontSize: 13 }}>Loading...</div>
+    </div>
+  );
 
   if (!currentUser) return <AuthPage />;
 
@@ -34,6 +42,7 @@ export default function App() {
         body { background: #0a0a0f; }
         input:focus, select:focus { border-color: #f97316 !important; outline: none; }
         @keyframes slideIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+        @keyframes spin { to { transform: rotate(360deg); } }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
         select { appearance: none; }
@@ -41,7 +50,6 @@ export default function App() {
         button:active { opacity: 0.7; }
       `}</style>
 
-      {/* Header */}
       <div style={{ background: "linear-gradient(135deg,#1a0a00 0%,#0a0a0f 60%)", borderBottom: "1px solid #1e1e1e", padding: "20px 16px 14px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
           <div>
@@ -56,7 +64,6 @@ export default function App() {
         <div style={{ width: 36, height: 3, background: "#f97316", marginTop: 8, borderRadius: 2 }} />
       </div>
 
-      {/* Page */}
       <div style={{ padding: "16px 0 0" }}>
         {tab === "leaderboard" && <Leaderboard />}
         {tab === "log"         && <LogWorkout />}
@@ -65,7 +72,6 @@ export default function App() {
         {tab === "admin"       && <AdminPage />}
       </div>
 
-      {/* Bottom Nav */}
       <div style={{ position: "fixed", bottom: 0, left: 0, right: 0, background: "#0f0f0f", borderTop: "1px solid #1e1e1e", display: "flex", justifyContent: "space-around", padding: "8px 0 14px", zIndex: 100 }}>
         {tabs.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, background: "none", border: "none", cursor: "pointer" }}>

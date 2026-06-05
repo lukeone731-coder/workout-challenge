@@ -1,6 +1,8 @@
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
-const ADMIN_PASSWORD = "admin123";
+const ADMIN_PASSWORD = "champ2024";
+const SUPABASE_URL = "https://hlomyzksltizesvlrdfp.supabase.co";
+const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhsb215emtzbHRpemVzdmxyZGZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MTkwODcsImV4cCI6MjA5NjE5NTA4N30.XnEAEzKbq2kk9l97id4gJHk3aZBJW0CMrYAIACUsU-w";
 
 const BASE_WORKOUTS = [
   { id: "burpees",    name: "Burpees",     type: "reps", threshold: 10, unit: "reps", icon: "⚡", base: true },
@@ -18,44 +20,92 @@ const load = (key, fallback) => {
 };
 const save = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
 
+// Supabase REST helper
+const db = async (table, options = {}) => {
+  const { method = "GET", body, params = "", select = "*" } = options;
+  let url = `${SUPABASE_URL}/rest/v1/${table}`;
+  if (method === "GET") url += `?select=${select}${params ? "&" + params : ""}`;
+  else if (params) url += `?${params}`;
+  const res = await fetch(url, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "apikey": SUPABASE_KEY,
+      "Authorization": `Bearer ${SUPABASE_KEY}`,
+      "Prefer": method === "POST" ? "return=representation" : "return=minimal",
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+  if (method === "GET" || options.returnData) return res.json();
+  return res.ok;
+};
+
 const AppContext = createContext(null);
 export const useApp = () => useContext(AppContext);
 
 export function AppProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => load("wc_session", null));
-  const [users, setUsers]             = useState(() => load("wc_users", []));
-  const [logs, setLogs]               = useState(() => load("wc_logs", []));
-  const [customWorkouts, setCustomWorkouts] = useState(() => load("wc_custom_workouts", []));
-  const [groups, setGroups]           = useState(() => load("wc_groups", []));
-  const [activeGroupId, setActiveGroupId] = useState(() => load("wc_active_group", null));
+  const [activeGroupId, setActiveGroupIdState] = useState(() => load("wc_active_group", null));
+  const [users, setUsers] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [logs, setLogs] = useState([]);
+  const [customWorkouts, setCustomWorkouts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => { save("wc_session", currentUser); }, [currentUser]);
-  useEffect(() => { save("wc_users", users); }, [users]);
-  useEffect(() => { save("wc_logs", logs); }, [logs]);
-  useEffect(() => { save("wc_custom_workouts", customWorkouts); }, [customWorkouts]);
-  useEffect(() => { save("wc_groups", groups); }, [groups]);
-  useEffect(() => { save("wc_active_group", activeGroupId); }, [activeGroupId]);
+  const setActiveGroupId = (id) => { setActiveGroupIdState(id); save("wc_active_group", id); };
 
   const allWorkouts = [...BASE_WORKOUTS, ...customWorkouts];
 
+  // Load all data from Supabase
+  const fetchAll = useCallback(async () => {
+    try {
+      const [u, g, gm, l, cw] = await Promise.all([
+        db("users", { select: "id,username,created_at" }),
+        db("groups"),
+        db("group_members"),
+        db("logs", { select: "*", params: "order=created_at.desc" }),
+        db("custom_workouts"),
+      ]);
+      // attach groupIds to users
+      const usersWithGroups = (u || []).map(user => ({
+        ...user,
+        groupIds: (gm || []).filter(m => m.user_id === user.id).map(m => m.group_id),
+      }));
+      setUsers(usersWithGroups);
+      setGroups(g || []);
+      setLogs(l || []);
+      setCustomWorkouts(cw || []);
+    } catch (e) { console.error("fetchAll error", e); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => { save("wc_session", currentUser); }, [currentUser]);
+
   // Auth
-  const signUp = (username, password) => {
+  const signUp = async (username, password) => {
     const trimmed = username.trim();
     if (!trimmed || !password) return "Please fill in all fields.";
-    if (users.find(u => u.username.toLowerCase() === trimmed.toLowerCase())) return "Username already taken.";
-    const user = { id: Date.now().toString(), username: trimmed, password, isAdmin: false, groupIds: [], joinedAt: new Date().toISOString() };
-    setUsers(prev => [...prev, user]);
+    const existing = await db("users", { params: `username=ilike.${encodeURIComponent(trimmed)}&limit=1` });
+    if (existing?.length > 0) return "Username already taken.";
+    const result = await db("users", { method: "POST", body: { username: trimmed, password }, returnData: true });
+    if (!result?.[0]) return "Sign up failed. Try again.";
+    const user = { ...result[0], groupIds: [] };
     setCurrentUser(user);
+    await fetchAll();
     return null;
   };
 
-  const signIn = (username, password) => {
-    const user = users.find(u => u.username.toLowerCase() === username.toLowerCase() && u.password === password);
+  const signIn = async (username, password) => {
+    const results = await db("users", { params: `username=ilike.${encodeURIComponent(username.trim())}&limit=1` });
+    const user = results?.[0];
     if (!user) return "Incorrect username or password.";
-    setCurrentUser(user);
-    // set active group to first group they're in
-    const firstGroup = groups.find(g => user.groupIds?.includes(g.id));
-    if (firstGroup && !activeGroupId) setActiveGroupId(firstGroup.id);
+    if (user.password !== password) return "Incorrect username or password.";
+    const members = await db("group_members", { params: `user_id=eq.${user.id}` });
+    const fullUser = { ...user, groupIds: (members || []).map(m => m.group_id) };
+    setCurrentUser(fullUser);
+    if (!activeGroupId && fullUser.groupIds.length > 0) setActiveGroupId(fullUser.groupIds[0]);
+    await fetchAll();
     return null;
   };
 
@@ -67,114 +117,108 @@ export function AppProvider({ children }) {
 
   const signOut = () => { setCurrentUser(null); setActiveGroupId(null); };
 
+  const refreshCurrentUser = async () => {
+    if (!currentUser || currentUser.isAdmin) return;
+    const members = await db("group_members", { params: `user_id=eq.${currentUser.id}` });
+    const groupIds = (members || []).map(m => m.group_id);
+    const updated = { ...currentUser, groupIds };
+    setCurrentUser(updated);
+    return updated;
+  };
+
   // Groups
-  const createGroup = (name) => {
+  const createGroup = async (name) => {
     const trimmed = name.trim();
     if (!trimmed) return "Please enter a group name.";
     const code = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const group = { id: Date.now().toString(), name: trimmed, code, createdAt: new Date().toISOString() };
-    setGroups(prev => [...prev, group]);
+    const result = await db("groups", { method: "POST", body: { name: trimmed, code }, returnData: true });
+    if (!result?.[0]) return "Failed to create group.";
+    await fetchAll();
     return null;
   };
 
-  const joinGroup = (code) => {
-    const group = groups.find(g => g.code.toUpperCase() === code.trim().toUpperCase());
+  const joinGroup = async (code) => {
+    const found = await db("groups", { params: `code=ilike.${code.trim()}&limit=1` });
+    const group = found?.[0];
     if (!group) return "Invalid group code.";
     if (currentUser.groupIds?.includes(group.id)) return "You're already in this group.";
-    const updated = { ...currentUser, groupIds: [...(currentUser.groupIds || []), group.id] };
-    setUsers(prev => prev.map(u => u.id === currentUser.id ? updated : u));
-    setCurrentUser(updated);
+    await db("group_members", { method: "POST", body: { user_id: currentUser.id, group_id: group.id } });
+    const updated = await refreshCurrentUser();
     setActiveGroupId(group.id);
+    await fetchAll();
     return null;
   };
 
-  const leaveGroup = (groupId) => {
-    const updated = { ...currentUser, groupIds: currentUser.groupIds.filter(id => id !== groupId) };
-    setUsers(prev => prev.map(u => u.id === currentUser.id ? updated : u));
-    setCurrentUser(updated);
+  const leaveGroup = async (groupId) => {
+    await db("group_members", { method: "DELETE", params: `user_id=eq.${currentUser.id}&group_id=eq.${groupId}` });
+    const updated = await refreshCurrentUser();
     if (activeGroupId === groupId) {
-      const next = updated.groupIds[0] || null;
+      const next = (updated?.groupIds || []).find(id => id !== groupId) || null;
       setActiveGroupId(next);
     }
+    await fetchAll();
   };
 
-  const deleteGroup = (groupId) => {
-    setGroups(prev => prev.filter(g => g.id !== groupId));
-    setUsers(prev => prev.map(u => ({ ...u, groupIds: (u.groupIds || []).filter(id => id !== groupId) })));
-    setLogs(prev => prev.filter(l => l.groupId !== groupId));
+  const deleteGroup = async (groupId) => {
+    await db("groups", { method: "DELETE", params: `id=eq.${groupId}` });
     if (activeGroupId === groupId) setActiveGroupId(null);
+    await fetchAll();
   };
 
   // Logs
-  const calcPoints = (workout, amount) => {
-    const raw = amount / workout.threshold;
-    return Math.round(raw * 10) / 10;
-  };
+  const calcPoints = (workout, amount) => Math.round((amount / workout.threshold) * 10) / 10;
 
-  const addLog = (workoutId, amount) => {
+  const addLog = async (workoutId, amount) => {
     const workout = allWorkouts.find(w => w.id === workoutId);
     if (!workout) return;
     const points = calcPoints(workout, parseFloat(amount));
     const userGroupIds = currentUser.groupIds || [];
-    // log once per group the user belongs to
-    const newLogs = userGroupIds.length > 0
+    const ts = Date.now();
+    const entries = userGroupIds.length > 0
       ? userGroupIds.map(groupId => ({
-          id: Date.now().toString() + "_" + groupId,
-          userId: currentUser.id,
-          username: currentUser.username,
-          workoutId,
-          workoutName: workout.name,
-          icon: workout.icon,
-          amount: parseFloat(amount),
-          unit: workout.unit,
-          points,
-          groupId,
-          date: new Date().toLocaleDateString(),
-          ts: Date.now(),
+          user_id: currentUser.id, group_id: groupId,
+          workout_id: workoutId, workout_name: workout.name,
+          icon: workout.icon, amount: parseFloat(amount),
+          unit: workout.unit, points,
         }))
-      : [{
-          id: Date.now().toString(),
-          userId: currentUser.id,
-          username: currentUser.username,
-          workoutId,
-          workoutName: workout.name,
-          icon: workout.icon,
-          amount: parseFloat(amount),
-          unit: workout.unit,
-          points,
-          groupId: null,
-          date: new Date().toLocaleDateString(),
-          ts: Date.now(),
-        }];
-    setLogs(prev => [...newLogs, ...prev]);
+      : [{ user_id: currentUser.id, group_id: null, workout_id: workoutId, workout_name: workout.name, icon: workout.icon, amount: parseFloat(amount), unit: workout.unit, points }];
+
+    for (const entry of entries) {
+      await db("logs", { method: "POST", body: entry });
+    }
+    await fetchAll();
     return points;
   };
 
-  const deleteLog = (id) => {
-    const log = logs.find(l => l.id === id);
-    if (!log) return;
-    if (currentUser.isAdmin || log.userId === currentUser.id) {
-      // delete all copies of this workout across groups (same ts + userId)
-      const log2 = logs.find(l => l.id === id);
-      setLogs(prev => prev.filter(l => !(l.userId === log2.userId && l.ts === log2.ts)));
-    }
+  const deleteLog = async (log) => {
+    if (!currentUser.isAdmin && log.user_id !== currentUser.id) return;
+    // delete all copies across groups (same user, same workout, same timestamp approx)
+    await db("logs", { method: "DELETE", params: `id=eq.${log.id}` });
+    await fetchAll();
   };
 
   const getPointsForUser = (userId, groupId) =>
-    logs.filter(l => l.userId === userId && l.groupId === groupId)
+    logs.filter(l => l.user_id === userId && l.group_id === groupId)
         .reduce((s, l) => s + l.points, 0);
 
   const getUsersInGroup = (groupId) =>
     users.filter(u => (u.groupIds || []).includes(groupId));
 
   // Admin
-  const removeUser = (userId) => {
-    setUsers(prev => prev.filter(u => u.id !== userId));
-    setLogs(prev => prev.filter(l => l.userId !== userId));
+  const removeUser = async (userId) => {
+    await db("users", { method: "DELETE", params: `id=eq.${userId}` });
+    await fetchAll();
   };
 
-  const addCustomWorkout = (workout) => setCustomWorkouts(prev => [...prev, workout]);
-  const removeCustomWorkout = (id) => setCustomWorkouts(prev => prev.filter(w => w.id !== id));
+  const addCustomWorkout = async (workout) => {
+    await db("custom_workouts", { method: "POST", body: workout });
+    await fetchAll();
+  };
+
+  const removeCustomWorkout = async (id) => {
+    await db("custom_workouts", { method: "DELETE", params: `id=eq.${id}` });
+    await fetchAll();
+  };
 
   const activeGroup = groups.find(g => g.id === activeGroupId) || null;
 
@@ -182,11 +226,11 @@ export function AppProvider({ children }) {
     <AppContext.Provider value={{
       currentUser, users, logs, allWorkouts, customWorkouts,
       groups, activeGroup, activeGroupId, setActiveGroupId,
+      loading, fetchAll,
       signUp, signIn, adminSignIn, signOut,
       createGroup, joinGroup, leaveGroup, deleteGroup,
       addLog, deleteLog, calcPoints, getPointsForUser, getUsersInGroup,
       removeUser, addCustomWorkout, removeCustomWorkout,
-      ADMIN_PASSWORD,
     }}>
       {children}
     </AppContext.Provider>
