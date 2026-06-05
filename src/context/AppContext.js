@@ -143,7 +143,7 @@ export function AppProvider({ children }) {
     if (!group) return "Invalid group code.";
     if (currentUser.groupIds?.includes(group.id)) return "You're already in this group.";
     await db("group_members", { method: "POST", body: { user_id: currentUser.id, group_id: group.id } });
-    const updated = await refreshCurrentUser();
+    await refreshCurrentUser();
     setActiveGroupId(group.id);
     await fetchAll();
     return null;
@@ -173,7 +173,6 @@ export function AppProvider({ children }) {
     if (!workout) return;
     const points = calcPoints(workout, parseFloat(amount));
     const userGroupIds = currentUser.groupIds || [];
-    const ts = Date.now();
     const entries = userGroupIds.length > 0
       ? userGroupIds.map(groupId => ({
           user_id: currentUser.id, group_id: groupId,
