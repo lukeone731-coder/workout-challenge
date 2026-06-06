@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const ADMIN_PASSWORD = "champ2024";
-const SUPABASE_URL = "https://hlomyzksltizesvlrdfp.supabase.co";
+const SUPABASE_URL = "https://hlomyzksltizesvlrdfp.supabase.co/rest/v1";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhsb215emtzbHRpemVzdmxyZGZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA2MTkwODcsImV4cCI6MjA5NjE5NTA4N30.XnEAEzKbq2kk9l97id4gJHk3aZBJW0CMrYAIACUsU-w";
 
 const BASE_WORKOUTS = [
@@ -23,7 +23,7 @@ const save = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)
 // Supabase REST helper
 const db = async (table, options = {}) => {
   const { method = "GET", body, params = "", select = "*" } = options;
-  let url = `${SUPABASE_URL}/rest/v1/${table}`;
+  let url = `${SUPABASE_URL}/${table}`;
   if (method === "GET") url += `?select=${select}${params ? "&" + params : ""}`;
   else if (params) url += `?${params}`;
   const res = await fetch(url, {
